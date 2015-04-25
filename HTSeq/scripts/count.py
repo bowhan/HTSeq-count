@@ -36,7 +36,7 @@ def count_reads_in_features( sam_filename, gff_filename, samtype, order, strande
       
    features = HTSeq.GenomicArrayOfSets( "auto", stranded != "no" )     
    counts = {}
-
+   all_mapper_counts = {} # bowhan
    # Try to open samfile to fail early in case it is not there
    if sam_filename != "-":
       open( sam_filename ).close()
@@ -57,6 +57,7 @@ def count_reads_in_features( sam_filename, gff_filename, samtype, order, strande
                   ( f.name, f.iv ) )
             features[ f.iv ] += feature_id
             counts[ f.attr[ id_attribute ] ] = 0
+            all_mapper_counts[ f.attr[ id_attribute ] ] = 0 # bowhan
          i += 1
          if i % 100000 == 0 and not quiet:
             sys.stderr.write( "%d GFF lines processed.\n" % i )
@@ -156,7 +157,11 @@ def count_reads_in_features( sam_filename, gff_filename, samtype, order, strande
                      ( r[1] is not None and r[1].optional_field( "NH" ) > 1 ):
                   nonunique += 1
                   write_to_samout( r, "__alignment_not_unique" )
-                  continue
+                  if ( r[0] is not None):
+                     NH = int ( r[0].optional_field( "NH" ) ) # bowhan
+                  elif ( r[1] is not None):
+                     NH = int ( r[1].optional_field( "NH" ) ) # bowhan
+                  # continue # bowhan
             except KeyError:
                pass
             if ( r[0] and r[0].aQual < minaqual ) or ( r[1] and r[1].aQual < minaqual ):
@@ -193,7 +198,9 @@ def count_reads_in_features( sam_filename, gff_filename, samtype, order, strande
                ambiguous += 1
             else:
                write_to_samout( r, list(fs)[0] )
-               counts[ list(fs)[0] ] += 1
+               if NH == 1: # bowhan
+                  counts[ list(fs)[0] ] += 1
+               all_mapper_counts[ list(fs)[0] ] += 1.0/NH # bowhan
          except UnknownChrom:
             write_to_samout( r, "__no_feature" )
             empty += 1
@@ -209,7 +216,8 @@ def count_reads_in_features( sam_filename, gff_filename, samtype, order, strande
       samoutfile.close()
 
    for fn in sorted( counts.keys() ):
-      print "%s\t%d" % ( fn, counts[fn] )
+      # print "%s\t%d" % ( fn, counts[fn] )
+      print "%s\t%d\t%0.2f" % ( fn, counts[fn], all_mapper_counts [fn] ) # bowhan
    print "__no_feature\t%d" % empty
    print "__ambiguous\t%d" % ambiguous
    print "__too_low_aQual\t%d" % lowqual
@@ -224,6 +232,7 @@ def main():
       usage = "%prog [options] alignment_file gff_file",
       
       description=
+         "Modified to report multi-mappers, normalized by the number of times can be mapped. " +
          "This script takes an alignment file in SAM/BAM format and a " +
          "feature file in GFF format and calculates for each feature " +
          "the number of reads mapping to it. See " +
